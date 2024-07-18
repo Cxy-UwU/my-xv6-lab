@@ -23,7 +23,7 @@ char *fmtname(char *path)
     if (strlen(p) >= DIRSIZ)
         return p;
     memmove(buf, p, strlen(p));
-    memset(buf + strlen(p), ' ', DIRSIZ - strlen(p));
+    memset(buf + strlen(p), '\0', DIRSIZ - strlen(p));
     return buf;
 }
 
@@ -55,7 +55,7 @@ void find(char *path, char *key)
     switch (st.type)
     {
     case T_FILE:
-        if (strcmp(fmtname(path), key) != 0)
+        if (strcmp(fmtname(path), key) == 0)
         {
             printf("%s\n", path);
         }
