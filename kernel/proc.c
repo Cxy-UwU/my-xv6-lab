@@ -322,6 +322,9 @@ fork(void)
   np->state = RUNNABLE;
   release(&np->lock);
 
+
+  np->trace_mask = p->trace_mask; //为子进程的掩码赋值
+
   return pid;
 }
 

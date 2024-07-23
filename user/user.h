@@ -22,6 +22,7 @@ int getpid(void);
 char* sbrk(int);
 int sleep(int);
 int uptime(void);
+int trace(int mask); // 在user/user.h中添加系统调用trace的声明
 
 // ulib.c
 int stat(const char*, struct stat*);

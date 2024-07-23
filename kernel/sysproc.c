@@ -91,3 +91,13 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+
+uint64 sys_trace(void) {
+    int mask;
+    // 在实现系统调用时，需要从用户空间获取参数。
+    argint(0, &mask);           // 通过 argint 获取第一个参数（位置 0）赋值给mask。其实也就是读了 p->trapframe->a0 的值;
+    struct proc *p = myproc();  // 获取当前进程的PCB
+    p->trace_mask = mask;       // 修改当前进程PCB的trace_mask
+    return 0;
+}
