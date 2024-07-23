@@ -37,3 +37,4 @@ entry("sbrk");
 entry("sleep");
 entry("uptime");
 entry("trace"); # 添加系统调用trace
+entry("sysinfo");

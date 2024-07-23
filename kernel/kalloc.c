@@ -80,3 +80,22 @@ kalloc(void)
     memset((char*)r, 5, PGSIZE); // fill with junk
   return (void*)r;
 }
+
+/*
+统计空闲内存空间
+struct run 表示一个空闲内存块，并且通过 next 指针将多个空
+闲块链接在一起，形成一个链表。遍历这个链表来计算所有空闲内存
+块的总和。
+*/
+uint64 freemem(){
+  struct run *r;
+  uint64 free = 0;
+
+  // 获取 kmem.lock 锁以保护空闲内存链表的访问
+  acquire(&kmem.lock);
+  for (r = kmem.freelist; r; r = r->next)
+    free += PGSIZE;
+  release(&kmem.lock);
+
+  return free;
+}
