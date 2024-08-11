@@ -83,9 +83,9 @@ kalloc(void)
 
 /*
 统计空闲内存空间
-struct run 表示一个空闲内存块，并且通过 next 指针将多个空
-闲块链接在一起，形成一个链表。遍历这个链表来计算所有空闲内存
-块的总和。
+kmem 的成员有 struct run *freelist ，它是xv6的空闲内存链表。
+struct run 是这个空闲链表的链表节点结构,它们通过 next 指针相连接。
+遍历freelist链表，循环累加单个内存块的大小，即可获得所有空闲内存的大小。
 */
 uint64 freemem(){
   struct run *r;
