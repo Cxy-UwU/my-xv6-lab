@@ -1,3 +1,12 @@
+/*
+  LAB_PGTBL 这个宏是在 makefile 的第93行添加的，
+  因此这里不定义 LAB_PGTBL 当然也能编译通过。
+  但是我的编辑器（VSCode）会一直给相关代码划红线，
+  所以有了下面这多余的三行。
+*/
+#ifndef LAB_PGTBL
+#define LAB_PGTBL
+#endif
 // Physical memory layout
 
 // qemu -machine virt is set up like this,
