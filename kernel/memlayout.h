@@ -4,9 +4,9 @@
   但是我的编辑器（VSCode）会一直给相关代码划红线，
   所以有了下面这多余的三行。
 */
-#ifndef LAB_PGTBL
-#define LAB_PGTBL
-#endif
+// #ifndef LAB_PGTBL
+// #define LAB_PGTBL
+// #endif
 // Physical memory layout
 
 // qemu -machine virt is set up like this,

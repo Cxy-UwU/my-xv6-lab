@@ -293,6 +293,32 @@ freewalk(pagetable_t pagetable)
   kfree((void*)pagetable);
 }
 
+// 打印 PTE 和 PA。并根据level递归地深入下一级页表。如果到达最末一级页表则返回停止递归。
+void vmprint_recursive(pagetable_t pagetable, int level)
+{
+  if(level<0)
+    return;
+  // there are 2^9 = 512 PTEs in a page table.
+  for (int i = 0; i < 512; i++)
+  {
+    pte_t pte = pagetable[i];
+    if ((pte & PTE_V))
+    {
+      for (int j = 0; j < 3-level;j++)
+        printf(" ..");
+      // this PTE points to a lower-level page table.
+      uint64 child = PTE2PA(pte);
+      printf("%d: pte %p pa %p\n",i, pte, child);
+      vmprint_recursive((pagetable_t)child, level - 1);
+    }
+  }
+}
+
+void vmprint(pagetable_t pagetable){
+  printf("page table %p\n", pagetable);
+  vmprint_recursive(pagetable, 2); // 调用递归打印页表的函数
+}
+
 // Free user memory pages,
 // then free page-table pages.
 void
