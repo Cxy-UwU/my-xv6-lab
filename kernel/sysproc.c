@@ -75,6 +75,29 @@ int
 sys_pgaccess(void)
 {
   // lab pgtbl: your code here.
+  uint64 base;            // 要检查的起始地址
+  int len;                // 要检查的长度
+  uint64 mask;            // 结果地址
+  argaddr(0, &base);
+  argint(1, &len);
+  argaddr(2, &mask);
+
+  uint64 result = 0;
+  struct proc *proc = myproc(); // 获取当前进程
+  // 遍历指定的长度
+  for (int i = 0; i < len; i++)
+  {
+    pte_t *pte = walk(proc->pagetable, base + i * PGSIZE, 0);
+    if (*pte & PTE_A) // 如果PTE_A位为1，则将其置为0，并在result中记录
+    {
+      *pte -= PTE_A;
+      result |= (1L << i);
+    }
+  }
+  // 将结果复制到用户空间
+  if (copyout(proc->pagetable, mask, (char *)&result, sizeof(result)) < 0)
+    panic("sys_pgacess copyout error");
+
   return 0;
 }
 #endif
