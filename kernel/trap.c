@@ -78,7 +78,22 @@ usertrap(void)
 
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2)
+  {
+    struct proc *proc = myproc();
+    if (proc->alarm_ticks && proc->have_return)     // 定时不为0，且已经返回
+    {
+      proc->passed_ticks++;                         // 计时增加
+      if (proc->passed_ticks == proc->alarm_ticks)  // 是否到时间
+      {
+        proc->saved_trapframe = *p->trapframe;      // 保存上下文
+        proc->trapframe->epc = proc->handler_va;    /*  将 trapframe 中的 epc 设置为用户定义的 handler 的地址，
+                                                      这样再次恢复用户态时会执行该 handler 函数。*/
+        proc->passed_ticks = 0;                     // 重置计时变量
+        proc->have_return = 0;                      // bool标志改为未返回，避免重入
+      }
+    }
     yield();
+  }
 
   usertrapret();
 }
