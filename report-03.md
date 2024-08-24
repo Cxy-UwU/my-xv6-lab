@@ -24,7 +24,7 @@ uint64 sys_getpid(void){
 
 下图的USYSCALL的位置、大小和数据结构已经帮我们定义好了。
 
-![](img/usyscall.png)
+![](img/03/usyscall.png)
 
 这个`usyscall`结构体是所有进程都会有的。所以把它添加为`proc`结构体的成员。
 
@@ -121,8 +121,11 @@ proc_freepagetable(pagetable_t pagetable, uint64 sz)
 
 #### 回答问题
 
-Which other xv6 system call(s) could be made faster using this shared page? Explain how.
+**Which other xv6 system call(s) could be made faster using this shared page? Explain how.**
 
+这种加速方式适用于**只涉及读取内核数据而不需要修改或执行复杂操作的调用**。
+
+除了`getpid()`以外，`uptime()`、`fstat()`等系统调用也符合这个特征，能够被加速。
 
 
 #### 实验心得
