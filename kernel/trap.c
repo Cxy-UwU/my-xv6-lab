@@ -29,6 +29,56 @@ trapinithart(void)
   w_stvec((uint64)kernelvec);
 }
 
+int cowhandler(pagetable_t pagetable, uint64 va)
+{
+  char *mem;
+
+  // 如果虚拟地址va超过最大虚拟地址MAXVA，返回错误
+  if (va >= MAXVA)
+    return -1;
+
+  // 获取虚拟地址va对应的页表项指针PTE
+  pte_t *pte = walk(pagetable, va, 0);
+
+  // 如果没有找到对应的页表项，返回错误
+  if (pte == 0)
+    return -1;
+
+  // 检查PTE是否有效，即检查PTE是否具有COW标志位、用户态访问权限和有效位
+  if ((*pte & PTE_RSW) == 0 || (*pte & PTE_U) == 0 || (*pte & PTE_V) == 0)
+  {
+    return -1;
+  }
+
+  // 为新页面分配物理内存，如果分配失败则返回错误
+  if ((mem = kalloc()) == 0)
+  {
+    return -1;
+  }
+
+  // 获取旧的物理地址
+  uint64 pa = PTE2PA(*pte);
+
+  // 将旧页面的数据复制到新分配的页面中
+  memmove((char *)mem, (char *)pa, PGSIZE);
+
+  // 注意：
+  // 因为分配了新的页面，所以要减少旧页面的引用计数
+  kfree((void *)pa);
+
+  // 获取旧的页表项标志
+  uint flags = PTE_FLAGS(*pte);
+
+  // 将PTE_W标志位设置为1，并将页表项指向新分配的物理页面(mem)
+  *pte = (PA2PTE(mem) | flags | PTE_W);
+
+  // 将COW标志位PTE_RSW清除
+  *pte &= ~PTE_RSW;
+
+  // 返回0表示成功
+  return 0;
+}
+
 //
 // handle an interrupt, exception, or system call from user space.
 // called from trampoline.S
@@ -65,9 +115,23 @@ usertrap(void)
     intr_on();
 
     syscall();
-  } else if((which_dev = devintr()) != 0){
+  }
+  // 当COW页面发生写操作时，产生页面错误
+  else if (r_scause() == 15) // scause 寄存器的值为15 表示 Store/AMO page fault
+  {
+    uint64 va = r_stval();
+    if (va >= p->sz)
+      setkilled(p);
+    int ret = cowhandler(p->pagetable, va);
+    if (ret != 0)
+      setkilled(p);
+  }
+  else if ((which_dev = devintr()) != 0)
+  {
     // ok
-  } else {
+  }
+  else
+  {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     setkilled(p);

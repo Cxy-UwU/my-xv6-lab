@@ -343,6 +343,7 @@ typedef uint64 *pagetable_t; // 512 PTEs
 #define PTE_W (1L << 2)
 #define PTE_X (1L << 3)
 #define PTE_U (1L << 4) // user can access
+#define PTE_RSW (1L << 8) // reserved for software  是否为 COW 映射
 
 // shift a physical address to the right place for a PTE.
 #define PA2PTE(pa) ((((uint64)pa) >> 12) << 10)
@@ -350,6 +351,8 @@ typedef uint64 *pagetable_t; // 512 PTEs
 #define PTE2PA(pte) (((pte) >> 10) << 12)
 
 #define PTE_FLAGS(pte) ((pte) & 0x3FF)
+
+#define PA2INDEX(pa) (((uint64)(pa)) / PGSIZE) // 从物理地址获取页面编号
 
 // extract the three 9-bit page table indices from a virtual address.
 #define PXMASK          0x1FF // 9 bits

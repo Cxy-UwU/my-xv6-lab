@@ -5,11 +5,15 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
-
+#include "spinlock.h"
+#include "proc.h"
 /*
  * the kernel's page table.
  */
 pagetable_t kernel_pagetable;
+
+uint32 ref_count[PHYSTOP / PGSIZE] = {0};   // 页表引用次数，用于实现COW
+struct spinlock ref_count_lock;             // 保护 ref_count 的自旋锁
 
 extern char etext[];  // kernel.ld sets this to end of kernel code.
 
@@ -315,20 +319,34 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
       panic("uvmcopy: pte should exist");
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
+
+    // 若父进程内存页设置了 PTE_W ，则父子进程都清除 PTE_W 并设置 COW 位
+    if (*pte & PTE_W) 
+    {
+      *pte |= PTE_RSW;
+      *pte -= PTE_W;
+    }
+
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
+
+    // 引用计数++
+    acquire(&ref_count_lock);
+    ++ref_count[PA2INDEX(pa)];
+    release(&ref_count_lock);
+
+    // uvmcopy 中不再需要 kalloc
+    // if ((mem = kalloc()) == 0) goto err;
+    // memmove(mem, (char*)pa, PGSIZE);
+
+    if(mappages(new, i, PGSIZE, (uint64)pa, flags) != 0){
+      // kfree(mem);
       goto err;
     }
   }
@@ -366,10 +384,44 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
     if(va0 >= MAXVA)
       return -1;
     pte = walk(pagetable, va0, 0);
-    if(pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_U) == 0 ||
-       (*pte & PTE_W) == 0)
+    if (pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_U) == 0) // 在此处不检查 PTE_W。因为写时复制的页本来就设置的是不可写的。
       return -1;
     pa0 = PTE2PA(*pte);
+
+    struct proc *p = myproc();
+    if (*pte == 0) // 如果PTE无效（为0），则标记进程为killed并返回错误
+    {
+      setkilled(p);
+      return -1;
+    }
+
+    // 检查是否是COW页面
+    // 如果页表项中PTE_W标志位没有设置（即页面不可写），但页面有COW标记（通过PTE_RSW标志位检测），需要触发写时复制。
+    if ((*pte & PTE_W) == 0)
+    {
+      if (*pte & PTE_RSW)
+      {
+        // 执行写时复制
+        char *mem = kalloc();
+        if (mem == 0) // 如果分配新的物理页失败，标记进程为killed并返回错误
+        {
+          setkilled(p);
+          return -1;
+        }
+        memmove(mem, (char *)pa0, PGSIZE);      // 将旧页面的数据复制到新分配的页面中
+        uint flags = PTE_FLAGS(*pte);           // 保存旧的页表项标志
+        uvmunmap(pagetable, va0, 1, 1);         // 取消映射旧的页表项，同时释放旧的物理页面
+        *pte = (PA2PTE(mem) | flags | PTE_W);   // 更新页表项，使其指向新分配的页面，并设置可写标志
+        *pte &= ~PTE_RSW;                       // 清除COW标志位
+        pa0 = (uint64)mem;                      // 更新 pa0 到新的物理地址
+      }
+      else
+      {
+        return -1; // 如果不是COW页面但仍不可写，返回错误
+      }
+    }
+
+
     n = PGSIZE - (dstva - va0);
     if(n > len)
       n = len;
