@@ -1,0 +1,11 @@
+{
+    "files.associations": {
+        "*.hpp": "cpp",
+        "stat.h": "c",
+        "user.h": "c",
+        "types.h": "c",
+        "fcntl.h": "c",
+        "fs.h": "c",
+        "proc.h": "c"
+    }
+}
