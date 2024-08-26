@@ -245,7 +245,7 @@ void main(void) {
 
    `backtrace`需要遍历整个调用堆栈，并在栈底停止。怎么判断循环是否应该停止了呢？实验指导说，**同一个栈的栈帧都在同一页上**，所以很显然，**帧指针`fp`走出了当前页就停止了**。
 
-   我一开始是使用`PGROUNDDOWN()`来判断**下一个`fp`是否和上一次的`ra`在同一页上**，代码是这样写的：
+   我一开始是使用`PGROUNDDOWN()`来判断**`fp`是否和`ra`在同一页上**，代码是这样写的：
 
    ```C
    if (PGROUNDDOWN(fp) != PGROUNDDOWN(ra))
@@ -268,3 +268,189 @@ void main(void) {
 
 `gdb`就有`backtrace`功能。本质应当差不多，都是通过栈这种后进先出的数据结构来记录函数调用的先后信息。当一个函数被调用时，其返回地址和局部变量等信息被压入堆栈；函数执行完毕后，这些信息从堆栈弹出，恢复执行到调用函数的下一条指令。
 
+
+
+## Alarm
+
+### 实验目的
+本实验的目标是在 `xv6` 操作系统中实现一个 `sigalarm` 系统调用，使得进程可以在消耗一定 CPU 时间后，周期性地执行用户定义的处理函数。这对于需要限制 CPU 时间或定期执行某些操作的计算密集型进程非常有用。
+
+### 实现步骤
+
+#### 1. 配置`makefile`并增加系统调用入口
+在 `Makefile` 中添加本实验的用户测试程序，使相应的代码被编译；在 `kernel/syscall.h` 中定义 `SYS_sigalarm` 和 `SYS_sigreturn` 系统调用号；在`kernel/syscall.c`中更改`syscalls`数组；在 `usys.pl` 中添加相应的`entry`……这些添加系统调用的步骤与Lab2相同，不再赘述。
+
+```diff
+--- a/Makefile
++++ b/Makefile
+@@ -188,7 +188,8 @@ UPROGS=\
+        $U/_grind\
+        $U/_wc\
+        $U/_zombie\
++       $U/_alarmtest\
++       $U/_usertests\
+```
+```diff
+--- a/kernel/syscall.h
++++ b/kernel/syscall.h
+@@ -20,3 +20,5 @@
+ #define SYS_link   19
+ #define SYS_mkdir  20
+ #define SYS_close  21
++#define SYS_sigalarm 22
++#define SYS_sigreturn 23
+```
+
+#### 2. 修改 `proc` 结构体
+
+在 `kernel/proc.h` 中为每个进程增加以下字段，用于存储 `sigalarm` 的相关信息：
+- `handler_va`：用户定义的处理函数的虚拟地址。
+- `alarm_ticks`：定时器设定的定时时长，以`ticks`为单位。
+- `passed_ticks`：记录自上次调用处理函数以来经过的`tick`数。这个值不断自增（后面的代码会实现），通过比较`passed_ticks`和`alarm_ticks`的大小来判断设定的时钟是否到时间。
+- `saved_trapframe`：保存中断时的寄存器状态。
+- `have_return`：标记处理函数是否已经完成，以防止重入。
+
+```c
+--- a/kernel/proc.h
++++ b/kernel/proc.h
+@@ -84,6 +84,11 @@ enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
+ // Per-process state
+ struct proc {
+   struct spinlock lock;
++  uint64 handler_va;
++  int alarm_ticks;
++  int passed_ticks;
++  struct trapframe saved_trapframe;
++  int have_return;
+```
+
+#### 3. 实现 `sys_sigalarm` 和 `sys_sigreturn`
+在 `kernel/sysproc.c` 中实现 `sys_sigalarm` 和 `sys_sigreturn`。
+
+`sys_sigalarm` 用于设置闹钟时间间隔和处理函数地址：
+
+```c
+uint64
+sys_sigalarm(void)
+{
+  int ticks;
+  uint64 handler_va;
+  argint(0, &ticks);
+  argaddr(1, &handler_va);
+  struct proc *proc = myproc();
+  proc->alarm_ticks = ticks;
+  proc->handler_va = handler_va;
+  proc->have_return = 1;
+  return 0;
+}
+```
+`sys_sigreturn` 用于从处理函数返回时恢复进程的上下文：
+
+``` c
+uint64
+sys_sigreturn(void)
+{
+  struct proc *proc = myproc();
+  *proc->trapframe = proc->saved_trapframe; // 恢复上下文
+  proc->have_return = 1;
+  return proc->trapframe->a0;
+}
+```
+
+#### 4. 在 `usertrap` 中处理alarm
+
+在 `kernel/trap.c` 中的 `usertrap()` 函数内，添加对计时器中断的处理。当定时器触发时，判断是否达到用户设定的时间间隔，如果是，则保存当前上下文并跳转到用户定义的处理函数。
+
+```c
+void
+usertrap(void)
+{
+  ......................................
+  // give up the CPU if this is a timer interrupt.
+  if(which_dev == 2)
+  {
+    struct proc *proc = myproc();
+    if (proc->alarm_ticks && proc->have_return)     // 定时不为0，且已经返回
+    {
+      proc->passed_ticks++;                         // 计时增加
+      if (proc->passed_ticks == proc->alarm_ticks)  // 是否到时间
+      {
+        proc->saved_trapframe = *p->trapframe;      // 保存上下文
+        proc->trapframe->epc = proc->handler_va;    /*  将 trapframe 中的 epc 设置为用户定义的 handler 的地址，
+                                                      这样再次恢复用户态时会执行该 handler 函数。*/
+        proc->passed_ticks = 0;                     // 重置计时变量
+        proc->have_return = 0;                      // bool标志改为未返回，避免重入
+      }
+    }
+    yield();
+  }
+
+  usertrapret();
+}
+```
+
+#### 测试
+完成以上步骤后，使用 `alarmtest` 进行测试，能够通过 `test0`, `test1`, `test2`, 和`test3` 。 
+
+![](img/04/alarmtest.png)
+
+使用`usertests -q` 测试，证明内核的其他功能没有被此次修改的代码损坏。
+
+![](img/04/usertest.png)
+
+
+
+### 实验中遇到的问题和解决方法
+
+1. **怎样“调用”handler函数？**
+
+   我们在`proc`里面保存了一份`handler`的虚拟地址。定时到了，就要**进入`handler`函数运行**，之后在`handler`函数末尾**又通过`sigreturn`返回之前的运行状态**，这整个流程如何做到？
+
+   - 我了解到 `trapframe->epc` 是中断发生时的`user program counter`的值，如果在内核态修改了`trapframe->epc`，那么在返回用户态的时候，就会从新的值所指向的指令继续执行。所以，**进行赋值`proc->trapframe->epc = proc->handler_va;`，返回用户态后就会导致用户程序在接下来的执行中跳转到 `handler_va` 所指向的地址处执行，造成一种handler函数被“调用”的假象**。（严格意义上这只是跳转，不能算是函数调用，因为没有经压栈传参之类的过程）。
+
+   - `sigreturn`如何返回之前的运行状态？**先在`saved_trapframe`中保存进入陷阱时的寄存器状态和上下文信息，在`sigreturn`中再通过`*proc->trapframe = proc->saved_trapframe;`恢复上下文即可**。虽然在进入`handler`的时候我们改了`epc`，但在这里我们不用额外担心`epc`的问题，因为`saved_trapframe`其实也恢复了原来的`epc`信息了，能够重新回到发生陷入时的状态，造成`handler`执行完后返回原先位置的效果。
+
+2. **被`test2`卡住：怎样避免handler函数重入** 
+
+   错误提示：`test2 failed: alarm handler called more than once`
+
+   实验指导这样写道：
+
+   - Prevent re-entrant calls to the handler----if a handler hasn't returned yet, the kernel shouldn't call it again. `test2` tests this.
+
+   `test2`没有通过，是因为`handler`还没有返回就被重新调用。**解决方式是增加一个`have_return`变量，用于表示`handler`此时是否可以进入。**进入了`handler`而尚未返回时，这个值为0，阻止重新进入；从未进入`handler`或上一次进入`handler`后完成了`sigreturn`，这个值为1，可以正常进入`handler`。
+
+3. **被`test3`卡住：怎样避免handler函数重入** 
+
+   本来是习惯性地在sys_sigreturn里面`return 0`：
+
+   ``` c
+   uint64
+   sys_sigreturn(void)
+   {
+     struct proc *proc = myproc();
+     *proc->trapframe = proc->saved_trapframe;
+     proc->have_return = 1;
+     return 0;
+   }
+   ```
+
+   错误提示：`test3 failed: register a0 changed`
+
+   实验指导这样写道：
+
+   - Make sure to restore a0. `sigreturn` is a system call, and its return value is stored in a0.
+
+   `register a0`充当了保存返回值的作用。在sys_sigreturn里面`return 0`，会导致回到用户态的时候，`a0`的值被改成`0`了，意味着运行进入`handler`又退出，没能保持用户态上下文的一致。
+
+   **解决办法是  `return proc->trapframe->a0;`，这样做会通过这次返回把原来`a0`的值又写到`a0`里面。**
+
+### 实验心得
+
+这个实验的难度是hard，确实很花时间。最开始觉得只是开一个变量数一下tick_count，然后到时间输出就完事了，但是越写越觉得不简单。我认为最具挑战性的部分是关乎怎么运行进入`handler`的这一部分，需要注意到`trapframe`的`epc`字段的作用，并更改它的值。这个实验还引导我查看和更改了xv6内核中的`usertrap`函数，用户态发生中断、异常、系统调用，都会交由这个函数来处理，是操作系统的一个重要函数。
+
+
+
+Lab 04 打分：
+
+![](img/04/grade.png)
