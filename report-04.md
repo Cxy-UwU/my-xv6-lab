@@ -245,7 +245,7 @@ void main(void) {
 
    `backtrace`需要遍历整个调用堆栈，并在栈底停止。怎么判断循环是否应该停止了呢？实验指导说，**同一个栈的栈帧都在同一页上**，所以很显然，**帧指针`fp`走出了当前页就停止了**。
 
-   我一开始是使用`PGROUNDDOWN()`来判断**`fp`是否和`ra`在同一页上**，代码是这样写的：
+   我一开始是使用`PGROUNDDOWN()`来判断 **`fp`是否和`ra`在同一页上**，代码是这样写的：
 
    ```C
    if (PGROUNDDOWN(fp) != PGROUNDDOWN(ra))
@@ -418,9 +418,9 @@ usertrap(void)
 
    - Prevent re-entrant calls to the handler----if a handler hasn't returned yet, the kernel shouldn't call it again. `test2` tests this.
 
-   `test2`没有通过，是因为`handler`还没有返回就被重新调用。**解决方式是增加一个`have_return`变量，用于表示`handler`此时是否可以进入。**进入了`handler`而尚未返回时，这个值为0，阻止重新进入；从未进入`handler`或上一次进入`handler`后完成了`sigreturn`，这个值为1，可以正常进入`handler`。
+   `test2`没有通过，是因为`handler`还没有返回就被重新调用。 **解决方式是增加一个`have_return`变量，用于表示`handler`此时是否可以进入。** 进入了`handler`而尚未返回时，这个值为0，阻止重新进入；从未进入`handler`或上一次进入`handler`后完成了`sigreturn`，这个值为1，可以正常进入`handler`。
 
-3. **被`test3`卡住：怎样避免handler函数重入** 
+3. **被`test3`卡住：寄存器`a0`的值被更改** 
 
    本来是习惯性地在sys_sigreturn里面`return 0`：
 
