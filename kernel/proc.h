@@ -82,7 +82,7 @@ struct trapframe {
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
 // Virtual memory mapping
-struct VMA
+struct vma
 {
   int valid;      // 有效位，当值为 0 时表示无效，即为 empty element
   uint64 addr;    // 记录起始地址
@@ -91,7 +91,7 @@ struct VMA
   int flags;      // 区域类型（shared/private）
   int off;        // 偏移量
   struct file *f; // 映射的文件
-  uint64 mapcnt;  // （延迟申请）已经映射的页数量
+  uint64 refcnt;  // （延迟申请）已经映射的页数量
 };
 #define VMA_MAX 16
 
