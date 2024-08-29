@@ -21,12 +21,13 @@ struct run {
 struct {
   struct spinlock lock;
   struct run *freelist;
-} kmem;
+} kmem[NCPU]; // 每个CPU有自己的空闲内存链表和锁
 
 void
 kinit()
 {
-  initlock(&kmem.lock, "kmem");
+  for (int i = 0; i < NCPU; i++)
+    initlock(&kmem[i].lock, "kmem"); // 初始化所有锁
   freerange(end, (void*)PHYSTOP);
 }
 
@@ -56,10 +57,16 @@ kfree(void *pa)
 
   r = (struct run*)pa;
 
-  acquire(&kmem.lock);
-  r->next = kmem.freelist;
-  kmem.freelist = r;
-  release(&kmem.lock);
+  // 必须关闭中断才能获取 CPU ID
+  push_off();
+  int cpu = cpuid();
+  pop_off();
+
+  // 根据 CPU ID 获取相应的锁、操作相应的空闲链表
+  acquire(&kmem[cpu].lock);
+  r->next = kmem[cpu].freelist;
+  kmem[cpu].freelist = r;
+  release(&kmem[cpu].lock);
 }
 
 // Allocate one 4096-byte page of physical memory.
@@ -70,11 +77,36 @@ kalloc(void)
 {
   struct run *r;
 
-  acquire(&kmem.lock);
-  r = kmem.freelist;
-  if(r)
-    kmem.freelist = r->next;
-  release(&kmem.lock);
+  // 必须关闭中断才能获取 CPU ID
+  push_off();
+  int cpu = cpuid();
+  pop_off();
+
+  acquire(&kmem[cpu].lock);
+  r = kmem[cpu].freelist;
+  if (r)                            // 有空闲页直接用
+  {
+    kmem[cpu].freelist = r->next;
+    release(&kmem[cpu].lock);
+  }
+  else                              // 没空闲页，从别的CPU那里拿来
+  {
+    release(&kmem[cpu].lock);
+    for (int new_cpu = 0; new_cpu < NCPU; ++new_cpu)  // 遍历别的CPU
+    {
+      if (new_cpu == cpu) // 排除自身
+        continue;
+      acquire(&kmem[new_cpu].lock);
+      r = kmem[new_cpu].freelist;
+      if (r) // 找到空闲页
+      {
+        kmem[new_cpu].freelist = r->next;
+        release(&kmem[new_cpu].lock);
+        break;
+      }
+      release(&kmem[new_cpu].lock);
+    }
+  }
 
   if(r)
     memset((char*)r, 5, PGSIZE); // fill with junk
