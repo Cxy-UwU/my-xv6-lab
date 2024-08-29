@@ -1,4 +1,6 @@
-## RISC-V assembly
+# Lab4 traps
+
+## 4.1 RISC-V assembly
 
 ### 实验目的
 
@@ -162,7 +164,7 @@ void main(void) {
 
 
 
-## Backtrace
+## 4.2 Backtrace
 
 ### 实验目的
 
@@ -270,7 +272,7 @@ void main(void) {
 
 
 
-## Alarm
+## 4.3 Alarm
 
 ### 实验目的
 本实验的目标是在 `xv6` 操作系统中实现一个 `sigalarm` 系统调用，使得进程可以在消耗一定 CPU 时间后，周期性地执行用户定义的处理函数。这对于需要限制 CPU 时间或定期执行某些操作的计算密集型进程非常有用。

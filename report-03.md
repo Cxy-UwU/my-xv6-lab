@@ -1,12 +1,12 @@
+# Lab3 page tables
 
+## 3.1 Speed up system calls
 
-### Speed up system calls
-
-#### 实验目的
+### 实验目的
 
 一些现代操作系统（如 Linux）会在用户空间和内核之间共享一篇只读的内存区域，加快某些系统调用的速度。本实验的目标是实现这一特性，以优化 `getpid()` 系统调用的执行效率。
 
-#### 实现步骤
+### 实现步骤
 
 原本的 `getpid()` 系统调用如下所示：
 
@@ -113,13 +113,13 @@ proc_freepagetable(pagetable_t pagetable, uint64 sz)
 
 ![](img/03/ugetpid.png)
 
-##### 遇到的问题
+#### 遇到的问题
 
 > 在编译时，makefile 的第93行会为本实验添加上 LAB_PGTBL 这个宏定义， 但是编辑器（VSCode）事先并不知道这个宏，一直给我的相关代码划红色波浪线。例如，VSCode读不到LAB_PGTBL 这个宏，所以不认识USYSCALL。
 >
 >  所以我在编写代码时重复进行定义\#define LAB_PGTBL，编译前再把它注释掉就好了。这个解决办法并不优雅。
 
-#### 回答问题
+### 回答问题
 
 **Which other xv6 system call(s) could be made faster using this shared page? Explain how.**
 
@@ -128,7 +128,7 @@ proc_freepagetable(pagetable_t pagetable, uint64 sz)
 除了`getpid()`以外，`uptime()`、`fstat()`等系统调用也符合这个特征，能够被加速。
 
 
-#### 实验心得
+### 实验心得
 
 之前会觉得系统调用总要经历***用户态发起调用 - 陷入内核态 - 内核处理 - 返回用户态***这样的一整套过程。本实验的`ugetpid`很特殊，通过在进程页表中插入只读页，就能实现在用户空间直接读取`pid`的功能，让`ugetpid`成为了一个**不用陷入内核态**的“系统调用”。
 
@@ -136,9 +136,9 @@ proc_freepagetable(pagetable_t pagetable, uint64 sz)
 
 
 
-### Print a page table
+## 3.2 Print a page table
 
-#### 实验目的
+### 实验目的
 
 实现一个函数 `vmprint()`，用于层次化地打印 RISC-V 页表的内容，以帮助可视化和调试页表结构。它的输出像是这样，用缩进来体现页表的层级：
 
@@ -158,7 +158,7 @@ page table 0x0000000087f6b000
 init: starting sh
 ```
 
-#### 实现步骤
+### 实现步骤
 
 先读了xv6 book [[xv6: a simple, Unix-like teaching operating system (mit.edu)](https://pdos.csail.mit.edu/6.828/2023/xv6/book-riscv-rev3.pdf)]与内存相关的部分，很快就找到了这张图（P33, Figure 3.2）： 
 
@@ -212,7 +212,7 @@ xv6使用三级页表，要打印出所有的有效页表项，只要从第一�
 
 ![](img/03/vmprint.png)
 
-##### **遇到的问题：**
+#### **遇到的问题**
 
    三级页表的的level（级数）是从哪里开始数的？
 
@@ -247,12 +247,12 @@ xv6使用三级页表，要打印出所有的有效页表项，只要从第一�
 
 
 
-### Detect which pages have been accessed
+## 3.3 Detect which pages have been accessed
 
-#### 实验目的
+### 实验目的
 实现 `pgaccess()` 系统调用，通过检查 RISC-V 页表中的访问位，报告哪些页面已被访问过。这个功能可以帮助垃圾收集器等程序优化内存管理。
 
-#### 实现步骤
+### 实现步骤
 
 ![](img/03/memory.png)
 
@@ -299,7 +299,7 @@ xv6使用三级页表，要打印出所有的有效页表项，只要从第一�
    }
    ```
 
-#### 实验心得
+### 实验心得
 本实验实现了 `pgaccess()` 系统调用。
 
 - 复习了lab2中创建新的系统调用的过程以及从用户获取参数、把结果拷贝回用户空间的方法；
